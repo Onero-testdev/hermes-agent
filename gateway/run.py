@@ -8352,22 +8352,39 @@ class GatewayRunner:
             platform_name = source.platform.value
             env_key = _home_target_env_var(platform_name)
             if not os.getenv(env_key):
-                # Slack dispatches all Hermes commands through a single
-                # parent slash command `/hermes`; bare `/sethome` is not
-                # registered and would fail with "app did not respond".
-                sethome_cmd = (
-                    "/hermes sethome"
-                    if source.platform == Platform.SLACK
-                    else "/sethome"
-                )
-                notice = (
-                    f"📬 No home channel is set for {platform_name.title()}. "
-                    f"A home channel is where Hermes delivers cron job results "
-                    f"and cross-platform messages.\n\n"
-                    f"Type {sethome_cmd} to make this chat your home channel, "
-                    f"or ignore to skip."
-                )
-                await self._deliver_platform_notice(source, notice)
+                # [ONERO] For Feishu, silently set the current chat as the
+                # home channel — the Onero one-click flow creates a single
+                # personal bot, so the very first DM is unambiguously where
+                # cron / cross-platform messages should land. The bare
+                # prompt below was being mistaken for an error.
+                if source.platform == Platform.FEISHU:
+                    try:
+                        await self._handle_set_home_command(event)
+                        logger.info(
+                            "Feishu home channel auto-set on first message (chat_id=%s)",
+                            source.chat_id,
+                        )
+                    except Exception:
+                        logger.warning(
+                            "Onero auto-sethome for Feishu failed", exc_info=True
+                        )
+                else:
+                    # Slack dispatches all Hermes commands through a single
+                    # parent slash command `/hermes`; bare `/sethome` is not
+                    # registered and would fail with "app did not respond".
+                    sethome_cmd = (
+                        "/hermes sethome"
+                        if source.platform == Platform.SLACK
+                        else "/sethome"
+                    )
+                    notice = (
+                        f"📬 No home channel is set for {platform_name.title()}. "
+                        f"A home channel is where Hermes delivers cron job results "
+                        f"and cross-platform messages.\n\n"
+                        f"Type {sethome_cmd} to make this chat your home channel, "
+                        f"or ignore to skip."
+                    )
+                    await self._deliver_platform_notice(source, notice)
         
         # -----------------------------------------------------------------
         # Voice channel awareness — inject current voice channel state
